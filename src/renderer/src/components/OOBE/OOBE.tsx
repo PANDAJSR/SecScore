@@ -3,10 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { Button, Segmented, Input, Tag, message, Typography, InputNumber } from 'antd'
 import { PlusOutlined, UploadOutlined, FileExcelOutlined } from '@ant-design/icons'
 import { OOBEBackground } from './OOBEBackground'
-import { useTheme } from '../contexts/ThemeContext'
-import { changeLanguage, AppLanguage, languageOptions } from '../i18n'
-import type { themeConfig } from '../../../preload/types'
-import logoSvg from '../assets/logoHD.svg'
+import { useTheme } from '../../contexts/ThemeContext'
+import { changeLanguage, AppLanguage, languageOptions } from '../../i18n'
+import type { themeConfig } from '../../../../preload/types'
+import logoSvg from '../../assets/logoHD.svg'
 
 interface oobeProps {
   visible: boolean

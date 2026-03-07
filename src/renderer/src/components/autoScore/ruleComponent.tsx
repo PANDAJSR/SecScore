@@ -1,7 +1,8 @@
 import { formatQuery, QueryBuilder, RuleGroupType } from 'react-querybuilder'
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
-  fields,
+  getFields,
   operators,
   defaultQuery,
   queryToAutoScoreRule,
@@ -20,6 +21,7 @@ interface RuleComponentProps {
 }
 
 export const RuleComponent: React.FC<RuleComponentProps> = ({ initialData, onChange }) => {
+  const { t } = useTranslation()
   const [query, setQuery] = useState<RuleGroupType>(
     initialData ? autoScoreRuleToQuery(initialData) : defaultQuery
   )
@@ -55,9 +57,9 @@ export const RuleComponent: React.FC<RuleComponentProps> = ({ initialData, onCha
 
   return (
     <div>
-      <Card title="触发条件" style={{ marginBottom: '16px' }}>
+      <Card title={t('autoScore.triggerCondition')} style={{ marginBottom: '16px' }}>
         <QueryBuilder
-          fields={fields}
+          fields={getFields(t)}
           operators={operators}
           query={query}
           onQueryChange={handleQueryChange}
@@ -67,7 +69,7 @@ export const RuleComponent: React.FC<RuleComponentProps> = ({ initialData, onCha
         </div>
       </Card>
 
-      <Card title="执行操作">
+      <Card title={t('autoScore.executeAction')}>
         <ActionComponent
           actions={actions}
           onAdd={handleAddAction}

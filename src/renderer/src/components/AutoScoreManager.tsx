@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react'
-import { PlusOutlined, HolderOutlined } from '@ant-design/icons'
+import { PlusOutlined, HolderOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { allTriggers, allActions, triggerRegistry, actionRegistry } from './com.automatically'
-import type { TriggerItem, ActionItem } from './com.automatically/types'
-import TriggerItemComponent from './com.automatically/TriggerItem'
-import ActionItemComponent from './com.automatically/ActionItem'
+import RuleComponent from './autoScore/ruleComponent'
 import {
   Card,
   Form,
   Input,
+  InputNumber,
   Button,
   message,
   Table,
@@ -21,38 +19,84 @@ import {
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 
-import { RuleComponent } from './autoScore/ruleComponent'
-import type { AutoScoreRuleData } from './autoScore/ruleBuilderUtils'
-
 interface AutoScoreRule {
   id: number
   enabled: boolean
   name: string
   studentNames: string[]
   lastExecuted?: string
-  triggers?: { event: string; value?: string; relation?: 'AND' | 'OR' }[]
-  actions?: { event: string; value?: string; reason?: string }[]
+  triggers?: TriggerItem[]
+  actions?: ActionItem[]
+}
+
+interface TriggerItem {
+  id: number
+  eventName: string
+  value: string
+  relation: 'AND' | 'OR'
+}
+
+interface ActionItem {
+  id: number
+  eventName: string
+  value: string
+  reason: string
+}
+interface TagItem {
+  id: number
+  name: string
 }
 
 interface AutoScoreRuleFormValues {
   name: string
-  studentNames: string
+  studentNames: string[]
 }
+
+const TRIGGER_DEFINITIONS = [
+  { eventName: 'interval_time_passed', labelKey: 'autoScore.triggerIntervalTime' },
+  { eventName: 'student_has_tag', labelKey: 'autoScore.triggerStudentTag' }
+]
+
+const ACTION_DEFINITIONS = [
+  { eventName: 'add_score', labelKey: 'autoScore.actionAddScore' },
+  { eventName: 'add_tag', labelKey: 'autoScore.actionAddTag' }
+]
 
 export const AutoScoreManager: React.FC = () => {
   const { t } = useTranslation()
   const [rules, setRules] = useState<AutoScoreRule[]>([])
+  const [allTags, setAllTags] = useState<TagItem[]>([])
   const [students, setStudents] = useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState<number>(50)
   const [form] = Form.useForm()
   const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
-  const [ruleData, setRuleData] = useState<AutoScoreRuleData>({
-    triggers: [],
-    actions: []
-  })
+  const [triggerList, setTriggerList] = useState<TriggerItem[]>([])
+  const [actionList, setActionList] = useState<ActionItem[]>([])
   const [messageApi, contextHolder] = message.useMessage()
+  const getTriggerLabel = (eventName: string): string => {
+    const def = TRIGGER_DEFINITIONS.find((d) => d.eventName === eventName)
+    return def ? t(def.labelKey) : eventName
+  }
+
+  const getActionLabel = (eventName: string): string => {
+    const def = ACTION_DEFINITIONS.find((d) => d.eventName === eventName)
+    return def ? t(def.labelKey) : eventName
+  }
+
+  async function fetchAllTags() {
+    if (!(window as any).api) return
+    try {
+      const res = await (window as any).api.tagsGetAll()
+      if (res.success && res.data) {
+        setAllTags(res.data)
+      }
+    } catch (e) {
+      console.error('Failed to fetch tags:', e)
+      messageApi.error(t('tags.fetchFailed'))
+    }
+  }
 
   const fetchRules = async () => {
     if (!(window as any).api) return
@@ -116,12 +160,24 @@ export const AutoScoreManager: React.FC = () => {
 
     const studentNames = Array.isArray(values.studentNames) ? values.studentNames : []
 
+    const triggers = triggerList.map((t) => ({
+      event: t.eventName,
+      value: t.value,
+      relation: t.relation
+    }))
+
+    const actions = actionList.map((a) => ({
+      event: a.eventName,
+      value: a.value,
+      reason: a.reason
+    }))
+
     const ruleDataToSubmit = {
       enabled: true,
       name: values.name,
       studentNames,
-      triggers: ruleData.triggers,
-      actions: ruleData.actions
+      triggers,
+      actions
     }
 
     try {
@@ -151,10 +207,11 @@ export const AutoScoreManager: React.FC = () => {
         )
         form.setFieldsValue({
           name: '',
-          studentNames: ''
+          studentNames: []
         })
         setEditingRuleId(null)
-        setRuleData({ triggers: [], actions: [] })
+        setTriggerList([])
+        setActionList([])
         fetchRules()
       } else {
         messageApi.error(
@@ -176,10 +233,22 @@ export const AutoScoreManager: React.FC = () => {
       name: rule.name,
       studentNames: rule.studentNames
     })
-    setRuleData({
-      triggers: rule.triggers || [],
-      actions: rule.actions || []
-    })
+    setTriggerList(
+      (rule.triggers || []).map((t, index) => ({
+        id: index + 1,
+        eventName: t.eventName,
+        value: t.value || '',
+        relation: t.relation || 'AND'
+      }))
+    )
+    setActionList(
+      (rule.actions || []).map((a, index) => ({
+        id: index + 1,
+        eventName: a.eventName,
+        value: a.value || '',
+        reason: a.reason || ''
+      }))
+    )
   }
 
   const handleDelete = async (ruleId: number) => {
@@ -239,7 +308,7 @@ export const AutoScoreManager: React.FC = () => {
   const handleResetForm = () => {
     form.setFieldsValue({
       name: '',
-      studentNames: ''
+      studentNames: []
     })
     setEditingRuleId(null)
     setTriggerList([])
@@ -248,7 +317,7 @@ export const AutoScoreManager: React.FC = () => {
 
   const handleAddTrigger = () => {
     const nextId = triggerList.length ? Math.max(...triggerList.map((t) => t.id)) + 1 : 1
-    const defaultTrigger = allTriggers.list[0]
+    const defaultTrigger = TRIGGER_DEFINITIONS[0]
     if (!defaultTrigger) {
       messageApi.error(t('autoScore.noTriggerAvailable'))
       return
@@ -264,25 +333,23 @@ export const AutoScoreManager: React.FC = () => {
     ])
   }
 
-  const handleDeleteTrigger = (id: number) => {
+  const handleRemoveTrigger = (id: number) => {
     setTriggerList((prev) => prev.filter((t) => t.id !== id))
   }
 
-  const handleTriggerChange = (id: number, eventName: string) => {
-    setTriggerList((prev) => prev.map((t) => (t.id === id ? { ...t, eventName, value: '' } : t)))
-  }
-
-  const handleTriggerValueChange = (id: number, value: string) => {
-    setTriggerList((prev) => prev.map((t) => (t.id === id ? { ...t, value } : t)))
-  }
-
-  const handleTriggerRelationChange = (id: number, relation: 'AND' | 'OR') => {
-    setTriggerList((prev) => prev.map((t) => (t.id === id ? { ...t, relation } : t)))
+  const handleTriggerChange = (
+    id: number,
+    field: keyof TriggerItem,
+    value: string | number | 'AND' | 'OR'
+  ) => {
+    setTriggerList((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, [field]: value } : t))
+    )
   }
 
   const handleAddAction = () => {
     const nextId = actionList.length ? Math.max(...actionList.map((a) => a.id)) + 1 : 1
-    const defaultAction = allActions.list[0]
+    const defaultAction = ACTION_DEFINITIONS[0]
     if (!defaultAction) {
       messageApi.error(t('autoScore.noActionAvailable'))
       return
@@ -298,20 +365,18 @@ export const AutoScoreManager: React.FC = () => {
     ])
   }
 
-  const handleDeleteAction = (id: number) => {
+  const handleRemoveAction = (id: number) => {
     setActionList((prev) => prev.filter((a) => a.id !== id))
   }
 
-  const handleActionChange = (id: number, eventName: string) => {
-    setActionList((prev) => prev.map((a) => (a.id === id ? { ...a, eventName, value: '' } : a)))
-  }
-
-  const handleActionValueChange = (id: number, value: string) => {
-    setActionList((prev) => prev.map((a) => (a.id === id ? { ...a, value } : a)))
-  }
-
-  const handleActionReasonChange = (id: number, reason: string) => {
-    setActionList((prev) => prev.map((a) => (a.id === id ? { ...a, reason } : a)))
+  const handleActionChange = (
+    id: number,
+    field: keyof ActionItem,
+    value: string | number
+  ) => {
+    setActionList((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, [field]: value } : a))
+    )
   }
 
   const columns: ColumnsType<AutoScoreRule> = [
@@ -340,10 +405,7 @@ export const AutoScoreManager: React.FC = () => {
         if (!triggers || triggers.length === 0) {
           return <span>{t('common.none')}</span>
         }
-        const triggerLabels = triggers.map((t) => {
-          const def = triggerRegistry.get(t.event)
-          return def?.label || t.event
-        })
+        const triggerLabels = triggers.map((t) => getTriggerLabel(t.eventName))
         return (
           <Tooltip title={triggerLabels.join(', ')}>
             <span>{t('autoScore.triggerCount', { count: triggers.length })}</span>
@@ -360,10 +422,7 @@ export const AutoScoreManager: React.FC = () => {
         if (!actions || actions.length === 0) {
           return <span>{t('common.none')}</span>
         }
-        const actionLabels = actions.map((a) => {
-          const def = actionRegistry.get(a.event)
-          return def?.label || a.event
-        })
+        const actionLabels = actions.map((a) => getActionLabel(a.eventName))
         return (
           <Tooltip title={actionLabels.join(', ')}>
             <span>{t('autoScore.actionCount', { count: actions.length })}</span>
@@ -422,6 +481,127 @@ export const AutoScoreManager: React.FC = () => {
     }
   ]
 
+  const renderTriggerItem = (trigger: TriggerItem, index: number) => (
+    <div
+      key={trigger.id}
+      style={{
+        padding: '12px',
+        border: '1px solid #d9d9d9',
+        borderRadius: '6px',
+        backgroundColor: 'var(--ss-card-bg)',
+        marginBottom: '8px'
+      }}
+    >
+      <Space wrap>
+        {index > 0 && (
+          <Select
+            value={trigger.relation}
+            onChange={(value) => handleTriggerChange(trigger.id, 'relation', value)}
+            style={{ width: 80 }}
+            options={[
+              { label: 'AND', value: 'AND' },
+              { label: 'OR', value: 'OR' }
+            ]}
+          />
+        )}
+        <Select
+          value={trigger.eventName}
+          onChange={(value) => handleTriggerChange(trigger.id, 'eventName', value)}
+          style={{ width: 150 }}
+          options={TRIGGER_DEFINITIONS.map((d) => ({
+            label: t(d.labelKey),
+            value: d.eventName
+          }))}
+        />
+        {trigger.eventName === 'interval_time_passed' && (
+          <InputNumber
+            value={trigger.value ? parseInt(trigger.value) : undefined}
+            onChange={(value) => handleTriggerChange(trigger.id, 'value', String(value || 0))}
+            placeholder={t('autoScore.minutesPlaceholder')}
+            min={1}
+            style={{ width: 120 }}
+            addonAfter={t('autoScore.minutes')}
+          />
+        )}
+        {trigger.eventName === 'student_has_tag' && (
+          <Select
+            mode="multiple"
+            allowClear
+            value={trigger.value}
+            onChange={(value) => handleTriggerChange(trigger.id, 'value', value)}
+            onClick={fetchAllTags}
+            style={{ width: 380 }}
+            options={allTags.map((tag) => ({
+              label: tag.name,
+              value: tag.name
+            }))}
+          />
+        )}
+        <Button
+          type="text"
+          danger
+          icon={<DeleteOutlined />}
+          onClick={() => handleRemoveTrigger(trigger.id)}
+        />
+      </Space>
+    </div>
+  )
+
+  const renderActionItem = (action: ActionItem) => (
+    <div
+      key={action.id}
+      style={{
+        padding: '12px',
+        border: '1px solid #d9d9d9',
+        borderRadius: '6px',
+        backgroundColor: 'var(--ss-card-bg)',
+        marginBottom: '8px'
+      }}
+    >
+      <Space wrap>
+        <Select
+          value={action.eventName}
+          onChange={(value) => handleActionChange(action.id, 'eventName', value)}
+          style={{ width: 150 }}
+          options={ACTION_DEFINITIONS.map((d) => ({
+            label: t(d.labelKey),
+            value: d.eventName
+          }))}
+        />
+        {action.eventName === 'add_score' && (
+          <InputNumber
+            value={action.value ? parseInt(action.value) : undefined}
+            onChange={(value) => handleActionChange(action.id, 'value', String(value || 0))}
+            placeholder={t('autoScore.scorePlaceholder')}
+            min={-100}
+            max={100}
+            style={{ width: 120 }}
+          />
+        )}
+        {action.eventName === 'add_tag' && (
+          <Input
+            value={action.value}
+            onChange={(e) => handleActionChange(action.id, 'value', e.target.value)}
+            placeholder={t('autoScore.tagNamePlaceholder')}
+            style={{ width: 200 }}
+          />
+        )}
+        <Input
+          value={action.reason}
+          onChange={(e) => handleActionChange(action.id, 'reason', e.target.value)}
+          placeholder={t('autoScore.reasonPlaceholder')}
+          style={{ width: 200 }}
+        />
+        <Button
+          type="text"
+          danger
+          icon={<DeleteOutlined />}
+          onClick={() => handleRemoveAction(action.id)}
+        />
+      </Space>
+    </div>
+  )
+
   return (
     <div style={{ padding: '24px' }}>
       {contextHolder}
@@ -447,21 +627,6 @@ export const AutoScoreManager: React.FC = () => {
               />
             </Form.Item>
           </div>
-
-          <div style={{ marginTop: '16px' }}>
-            <RuleComponent initialData={ruleData} onChange={(data) => setRuleData(data)} />
-          </div>
-
-          <div style={{ marginTop: '24px', display: 'flex', gap: '12px' }}>
-            <Button type="primary" onClick={handleSubmit}>
-              {editingRuleId !== null
-                ? t('autoScore.updateAutomation')
-                : t('autoScore.addAutomation')}
-            </Button>
-            <Button onClick={handleResetForm}>
-              {editingRuleId !== null ? t('autoScore.cancelEdit') : t('autoScore.resetForm')}
-            </Button>
-          </div>
         </Form>
       </Card>
 
@@ -470,8 +635,9 @@ export const AutoScoreManager: React.FC = () => {
         title={t('autoScore.whenTriggered')}
       >
         <Space orientation="vertical" style={{ width: '100%' }}>
-          {triggerItems}
-          <Button
+{/*             {triggerList.map((trigger, index) => renderTriggerItem(trigger, index))} 
+ */}            <RuleComponent />
+            <Button
             type="dashed"
             icon={<PlusOutlined />}
             onClick={handleAddTrigger}
@@ -486,8 +652,8 @@ export const AutoScoreManager: React.FC = () => {
         style={{ marginBottom: '24px', backgroundColor: 'var(--ss-card-bg)' }}
         title={t('autoScore.triggeredActions')}
       >
-        <Space orientation="vertical" style={{ width: '100%' }}>
-          {actionItems}
+        <Space direction="vertical" style={{ width: '100%' }}>
+          {actionList.map((action) => renderActionItem(action))}
           <Button
             type="dashed"
             icon={<PlusOutlined />}
@@ -498,6 +664,17 @@ export const AutoScoreManager: React.FC = () => {
           </Button>
         </Space>
       </Card>
+
+      <div style={{ marginBottom: '24px', display: 'flex', gap: '12px' }}>
+        <Button type="primary" onClick={handleSubmit}>
+          {editingRuleId !== null
+            ? t('autoScore.updateAutomation')
+            : t('autoScore.addAutomation')}
+        </Button>
+        <Button onClick={handleResetForm}>
+          {editingRuleId !== null ? t('autoScore.cancelEdit') : t('autoScore.resetForm')}
+        </Button>
+      </div>
 
       <Card style={{ marginBottom: '24px', backgroundColor: 'var(--ss-card-bg)' }}>
         <Table

@@ -4,7 +4,7 @@ import { HashRouter, useLocation, useNavigate, Routes, Route } from 'react-route
 import { useTranslation } from 'react-i18next'
 import { Sidebar } from './components/Sidebar'
 import { ContentArea } from './components/ContentArea'
-import { OOBE } from './components/OOBE'
+import { OOBE } from './components/OOBE/OOBE'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 
 function MainContent(): React.JSX.Element {

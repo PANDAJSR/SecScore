@@ -17,36 +17,46 @@ export interface AutoScoreRuleData {
   actions: AutoScoreAction[]
 }
 
-export const TRIGGER_TYPES = {
+// i18n key definitions for triggers and actions
+export const TRIGGER_TYPE_KEYS = {
   interval_time_passed: {
-    label: '间隔时间',
-    description: '每隔指定时间自动触发'
+    labelKey: 'autoScore.triggerIntervalTime',
+    descriptionKey: 'triggers.intervalTime.description'
   },
   student_has_tag: {
-    label: '学生标签',
-    description: '当学生拥有指定标签时触发'
+    labelKey: 'autoScore.triggerStudentTag',
+    descriptionKey: 'triggers.studentTag.description'
   }
 }
 
-export const ACTION_TYPES = {
+export const ACTION_TYPE_KEYS = {
   add_score: {
-    label: '加分',
-    description: '为学生增加分数'
+    labelKey: 'autoScore.actionAddScore',
+    descriptionKey: 'actions.addScore.description'
   },
   add_tag: {
-    label: '添加标签',
-    description: '为学生添加标签'
+    labelKey: 'autoScore.actionAddTag',
+    descriptionKey: 'actions.addTag.description'
   }
 }
 
-export const fields: Field[] = [
-  { name: 'interval_time_passed', label: '间隔时间（分钟）', placeholder: '例如：1440' },
-  { name: 'student_has_tag', label: '学生标签', placeholder: '例如：优秀学生,班干部' }
+// Function to get fields with i18n support
+export const getFields = (t: (key: string) => string): Field[] => [
+  { 
+    name: 'interval_time_passed', 
+    label: t('autoScore.triggerIntervalTime'), 
+    placeholder: t('autoScore.intervalMinutesPlaceholder') 
+  },
+  { 
+    name: 'student_has_tag', 
+    label: t('autoScore.triggerStudentTag'), 
+    placeholder: t('autoScore.tagNamesPlaceholder') 
+  }
 ]
 
 export const operators: Operator[] = [
-  { name: '=', label: '等于' },
-  { name: 'contains', label: '包含' }
+  { name: '=', label: '=' },
+  { name: 'contains', label: 'contains' }
 ]
 
 export const defaultQuery: RuleGroupType = {

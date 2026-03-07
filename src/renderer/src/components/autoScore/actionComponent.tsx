@@ -1,5 +1,6 @@
 import { Space, Input, InputNumber, Select, Button } from 'antd'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import type { AutoScoreAction } from './ruleBuilderUtils'
 
 interface ActionComponentProps {
@@ -9,19 +10,26 @@ interface ActionComponentProps {
   onChange: (index: number, field: keyof AutoScoreAction, value: any) => void
 }
 
+const ACTION_DEFINITIONS = [
+  { eventName: 'add_score', labelKey: 'autoScore.actionAddScore' },
+  { eventName: 'add_tag', labelKey: 'autoScore.actionAddTag' }
+]
+
 export const ActionComponent: React.FC<ActionComponentProps> = ({
   actions,
   onAdd,
   onRemove,
   onChange
 }) => {
+  const { t } = useTranslation()
+
   const handleActionChange = (index: number, field: keyof AutoScoreAction, value: any) => {
     onChange(index, field, value)
   }
 
   return (
     <div>
-      <Space direction="vertical" style={{ width: '100%' }}>
+      <Space orientation="vertical" style={{ width: '100%' }}>
         {actions.map((action, index) => (
           <div
             key={index}
@@ -29,7 +37,7 @@ export const ActionComponent: React.FC<ActionComponentProps> = ({
               padding: '12px',
               border: '1px solid #d9d9d9',
               borderRadius: '6px',
-              backgroundColor: '#fafafa'
+              backgroundColor: 'var(--ss-card-bg)'
             }}
           >
             <Space style={{ width: '100%' }} wrap>
@@ -37,12 +45,9 @@ export const ActionComponent: React.FC<ActionComponentProps> = ({
                 value={action.event}
                 onChange={(value) => handleActionChange(index, 'event', value)}
                 style={{ width: 150 }}
-                options={Object.entries({
-                  add_score: { label: '加分', description: '为学生增加分数' },
-                  add_tag: { label: '添加标签', description: '为学生添加标签' }
-                }).map(([key, val]) => ({
-                  label: val.label,
-                  value: key
+                options={ACTION_DEFINITIONS.map((d) => ({
+                  label: t(d.labelKey),
+                  value: d.eventName
                 }))}
               />
 
@@ -50,7 +55,7 @@ export const ActionComponent: React.FC<ActionComponentProps> = ({
                 <InputNumber
                   value={action.value ? parseInt(action.value) : 0}
                   onChange={(value) => handleActionChange(index, 'value', String(value || 0))}
-                  placeholder="分数"
+                  placeholder={t('autoScore.scoreLabel')}
                   min={-100}
                   max={100}
                   style={{ width: 120 }}
@@ -61,7 +66,7 @@ export const ActionComponent: React.FC<ActionComponentProps> = ({
                 <Input
                   value={action.value}
                   onChange={(e) => handleActionChange(index, 'value', e.target.value)}
-                  placeholder="标签名称"
+                  placeholder={t('autoScore.tagNameLabel')}
                   style={{ width: 200 }}
                 />
               )}
@@ -69,7 +74,7 @@ export const ActionComponent: React.FC<ActionComponentProps> = ({
               <Input
                 value={action.reason}
                 onChange={(e) => handleActionChange(index, 'reason', e.target.value)}
-                placeholder="操作说明（可选）"
+                placeholder={t('autoScore.operationNoteLabel')}
                 style={{ flex: 1, minWidth: 200 }}
               />
 
@@ -84,7 +89,7 @@ export const ActionComponent: React.FC<ActionComponentProps> = ({
         ))}
 
         <Button type="dashed" icon={<PlusOutlined />} onClick={onAdd} block>
-          添加操作
+          {t('autoScore.addOperation')}
         </Button>
       </Space>
     </div>

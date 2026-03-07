@@ -495,7 +495,25 @@
     "triggerCount": "{{count}} triggers",
     "actionCount": "{{count}} actions",
     "studentCount": "{{count}} students",
-    "studentPlaceholder": "Please select or search students (leave empty for all students)"
+    "studentPlaceholder": "Please select or search students (leave empty for all students)",
+    "triggerCondition": "Trigger Condition",
+    "executeAction": "Execute Action",
+    "addOperation": "Add Operation",
+    "scoreLabel": "Score",
+    "tagNameLabel": "Tag Name",
+    "operationNoteLabel": "Operation Note (Optional)",
+    "intervalMinutesPlaceholder": "e.g. 1440",
+    "tagNamesPlaceholder": "e.g. excellent_student,class_monitor",
+    "triggerIntervalTime": "Interval Time",
+    "triggerStudentTag": "Student Tag",
+    "actionAddScore": "Add Score",
+    "actionAddTag": "Add Tag",
+    "minutesPlaceholder": "Enter minutes",
+    "minutes": "minutes",
+    "tagsPlaceholder": "Enter tag name",
+    "scorePlaceholder": "Enter score",
+    "tagNamePlaceholder": "Enter tag name",
+    "reasonPlaceholder": "Enter reason"
   },
   "triggers": {
     "studentTag": {
