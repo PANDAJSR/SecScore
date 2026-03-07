@@ -1,16 +1,10 @@
 import { Service } from '../../shared/kernel'
 import { MainContext } from '../context'
-import { student } from '../repos/StudentRepository'
-import { getTriggerLogic } from '../../shared/triggers'
+import { AutoScoreRuleEngine, type RuleConfig, type AutoScoreContext } from '../../shared/autoScore/AutoScoreRuleEngine'
 
-interface AutoScoreRule {
+interface AutoScoreRule extends RuleConfig {
   id: number
-  enabled: boolean
-  name: string
-  studentNames: string[]
   lastExecuted?: Date
-  triggers?: { event: string; value?: string; relation?: 'AND' | 'OR' }[]
-  actions?: { event: string; value?: string; reason?: string }[]
 }
 
 interface AutoScoreRuleFileData {
@@ -19,8 +13,8 @@ interface AutoScoreRuleFileData {
   name: string
   studentNames: string[]
   lastExecuted?: string
-  triggers?: { event: string; value?: string; relation?: 'AND' | 'OR' }[]
-  actions?: { event: string; value?: string; reason?: string }[]
+  triggers?: Array<{ event: string; value?: string; relation?: 'AND' | 'OR' }>
+  actions?: Array<{ event: string; value?: string; reason?: string }>
 }
 
 interface AutoScoreRulesFile {
@@ -41,9 +35,11 @@ export class AutoScoreService extends Service {
   private rules: AutoScoreRule[] = []
   private timers: Map<number, NodeJS.Timeout> = new Map()
   private initialized = false
+  private ruleEngine: AutoScoreRuleEngine
 
   constructor(ctx: MainContext) {
     super(ctx, 'autoScore')
+    this.ruleEngine = new AutoScoreRuleEngine()
     this.registerIpc()
   }
 
@@ -112,6 +108,17 @@ export class AutoScoreService extends Service {
         if (!this.mainCtx.permissions.requirePermission(event, 'admin'))
           return { success: false, message: 'Permission denied' }
         return { success: true, data: { enabled: this.isEnabled() } }
+      } catch (err: any) {
+        return { success: false, message: err.message }
+      }
+    })
+
+    this.mainCtx.handle('auto-score:sortRules', async (event, ruleIds) => {
+      try {
+        if (!this.mainCtx.permissions.requirePermission(event, 'admin'))
+          return { success: false, message: 'Permission denied' }
+        const success = await this.sortRules(ruleIds)
+        return { success, data: success }
       } catch (err: any) {
         return { success: false, message: err.message }
       }
@@ -260,8 +267,11 @@ export class AutoScoreService extends Service {
       this.stopRules()
     }
 
+    this.ruleEngine = new AutoScoreRuleEngine()
+
     for (const rule of this.rules) {
       if (rule.enabled) {
+        await this.ruleEngine.addRule(rule)
         this.startRuleTimer(rule)
       }
     }
@@ -280,11 +290,20 @@ export class AutoScoreService extends Service {
     let primaryTrigger: { event: string; value?: string } | undefined
 
     for (const trigger of rule.triggers || []) {
-      const logic = getTriggerLogic(trigger.event)
-      if (logic?.calculateNextTime) {
-        const result = logic.calculateNextTime(trigger.value || '', rule.lastExecuted, now)
-        if (delayMs === 0 || result.delayMs < delayMs) {
-          delayMs = result.delayMs
+      if (trigger.event === 'interval_time_passed') {
+        const minutes = parseInt(trigger.value || '30', 10)
+        const intervalMs = minutes * 60 * 1000
+
+        let nextExecuteTime: Date
+        if (rule.lastExecuted) {
+          nextExecuteTime = new Date(rule.lastExecuted.getTime() + intervalMs)
+        } else {
+          nextExecuteTime = new Date(now.getTime() + intervalMs)
+        }
+
+        const triggerDelayMs = nextExecuteTime.getTime() - now.getTime()
+        if (delayMs === 0 || triggerDelayMs < delayMs) {
+          delayMs = triggerDelayMs
           primaryTrigger = trigger
         }
       }
@@ -314,11 +333,20 @@ export class AutoScoreService extends Service {
     let primaryTrigger: { event: string; value?: string } | undefined
 
     for (const trigger of rule.triggers || []) {
-      const logic = getTriggerLogic(trigger.event)
-      if (logic?.calculateNextTime) {
-        const result = logic.calculateNextTime(trigger.value || '', rule.lastExecuted, now)
-        if (result.delayMs < minDelayMs) {
-          minDelayMs = result.delayMs
+      if (trigger.event === 'interval_time_passed') {
+        const minutes = parseInt(trigger.value || '30', 10)
+        const intervalMs = minutes * 60 * 1000
+
+        let nextExecuteTime: Date
+        if (rule.lastExecuted) {
+          nextExecuteTime = new Date(rule.lastExecuted.getTime() + intervalMs)
+        } else {
+          nextExecuteTime = new Date(now.getTime() + intervalMs)
+        }
+
+        const triggerDelayMs = nextExecuteTime.getTime() - now.getTime()
+        if (triggerDelayMs < minDelayMs) {
+          minDelayMs = triggerDelayMs
           primaryTrigger = trigger
         }
       }
@@ -340,60 +368,25 @@ export class AutoScoreService extends Service {
       this.logger.info(`Executing auto score rule: ${rule.name}`)
 
       const studentRepo = this.mainCtx.students
+      const eventRepo = this.mainCtx.events
 
-      let studentsToScore: student[] = []
-      if (rule.studentNames.length === 0) {
-        const allStudents = await studentRepo.findAll()
-        studentsToScore = allStudents
-      } else {
-        const allStudents = await studentRepo.findAll()
-        for (const name of rule.studentNames) {
-          const student = allStudents.find((s) => s.name === name)
-          if (student) {
-            studentsToScore.push(student)
-          }
-        }
+      const allStudents = await studentRepo.findAll()
+
+      let studentsToScore = allStudents
+      if (rule.studentNames.length > 0) {
+        studentsToScore = allStudents.filter((s) => rule.studentNames.includes(s.name))
       }
 
-      // 使用AND/OR逻辑评估触发器
-      const matchedStudents = this.evaluateTriggersWithLogic(rule, studentsToScore)
+      const studentNames = studentsToScore.map((s) => s.name)
+      const lastScoreTimeMap = await eventRepo.getLastScoreTimeByStudents(studentNames)
 
-      if (matchedStudents.length > 0) {
-        for (const action of rule.actions || []) {
-          await this.executeAction(action, matchedStudents, rule.name)
-        }
-      }
-
-      rule.lastExecuted = new Date()
-      await this.saveRulesToFile()
-
-      this.logger.info(
-        `Auto score rule executed successfully for ${matchedStudents.length} students`
-      )
-    } catch (error) {
-      this.logger.error(`Failed to execute auto score rule ${rule.name}:`, { error })
-    }
-  }
-
-  private evaluateTriggersWithLogic(rule: AutoScoreRule, initialStudents: student[]): student[] {
-    if (!rule.triggers || rule.triggers.length === 0) {
-      return []
-    }
-
-    let resultStudents: student[] = [...initialStudents]
-    let currentGroup: student[] = [...initialStudents]
-    let currentRelation: 'AND' | 'OR' = 'AND'
-
-    for (let i = 0; i < rule.triggers.length; i++) {
-      const trigger = rule.triggers[i]
-      const logic = getTriggerLogic(trigger.event)
-
-      if (!logic?.check) {
-        continue
-      }
-
-      const context = {
-        students: currentGroup,
+      const context: AutoScoreContext = {
+        students: studentsToScore.map((s) => ({
+          id: s.id,
+          name: s.name,
+          tags: s.tags || [],
+          lastScoreTime: lastScoreTimeMap.get(s.name) || new Date(0),
+        })),
         events: [],
         rule: {
           id: rule.id,
@@ -405,138 +398,39 @@ export class AutoScoreService extends Service {
         now: new Date()
       }
 
-      const result = logic.check(context, trigger.value || '')
+      const results = await this.ruleEngine.run(context)
 
-      if (!result.matchedStudents || result.matchedStudents.length === 0) {
-        // 当前触发器没有匹配的学生
-        if (currentRelation === 'AND') {
-          // AND关系下，任何一个触发器不匹配，整个组就不匹配
-          currentGroup = []
-        }
-        // OR关系下，继续评估下一个触发器
-      } else {
-        // 当前触发器有匹配的学生
-        if (currentRelation === 'AND') {
-          // AND关系下，取交集
-          currentGroup = currentGroup.filter((student) =>
-            result.matchedStudents!.some((matched) => matched.id === student.id)
-          )
-        } else {
-          // OR关系下，取并集
-          const newStudents = result.matchedStudents.filter(
-            (matched) => !currentGroup.some((student) => student.id === matched.id)
-          )
-          currentGroup = [...currentGroup, ...newStudents]
-        }
-      }
-
-      // 处理下一个关系（如果存在）
-      if (i < rule.triggers.length - 1) {
-        const nextRelation = rule.triggers[i + 1].relation || 'AND'
-
-        if (nextRelation !== currentRelation) {
-          // 关系发生变化，处理当前组的结果
-          if (currentRelation === 'AND') {
-            // AND组结束，如果当前组不为空，则合并到结果
-            if (currentGroup.length > 0) {
-              resultStudents = resultStudents.filter((student) =>
-                currentGroup.some((groupStudent) => groupStudent.id === student.id)
-              )
-            } else {
-              // AND组为空，整个规则不匹配
-              return []
-            }
-          } else {
-            // OR组结束，合并当前组到结果
-            const newStudents = currentGroup.filter(
-              (groupStudent) =>
-                !resultStudents.some((resultStudent) => resultStudent.id === groupStudent.id)
+      for (const result of results) {
+        if (result.matchedStudents.length > 0) {
+          for (const action of result.actions) {
+            await this.ruleEngine.executeAction(
+              action.event,
+              result.matchedStudents,
+              {
+                ...action,
+                ruleId: rule.id,
+                ruleName: rule.name,
+                studentRepo
+              },
+              eventRepo
             )
-            resultStudents = [...resultStudents, ...newStudents]
           }
-
-          // 重置当前组为所有学生，开始新的关系组
-          currentGroup = [...initialStudents]
-          currentRelation = nextRelation
         }
       }
-    }
 
-    // 处理最后一组的结果
-    if (currentRelation === 'AND') {
-      // AND组结束，如果当前组不为空，则合并到结果
-      if (currentGroup.length > 0) {
-        resultStudents = resultStudents.filter((student) =>
-          currentGroup.some((groupStudent) => groupStudent.id === student.id)
-        )
-      } else {
-        // AND组为空，整个规则不匹配
-        return []
-      }
-    } else {
-      // OR组结束，合并当前组到结果
-      const newStudents = currentGroup.filter(
-        (groupStudent) =>
-          !resultStudents.some((resultStudent) => resultStudent.id === groupStudent.id)
+      rule.lastExecuted = new Date()
+      await this.saveRulesToFile()
+
+      this.logger.info(
+        `Auto score rule executed successfully for ${results.reduce((sum, r) => sum + r.matchedStudents.length, 0)} students`
       )
-      resultStudents = [...resultStudents, ...newStudents]
-    }
-
-    return resultStudents
-  }
-
-  private async executeAction(
-    action: { event: string; value?: string; reason?: string },
-    students: student[],
-    ruleName: string
-  ) {
-    const eventRepo = this.mainCtx.events
-
-    switch (action.event) {
-      case 'add_score': {
-        const scoreValue = action.value ? parseInt(action.value, 10) : 0
-        const reason = action.reason || `自动化加分 - ${ruleName}`
-        for (const student of students) {
-          await eventRepo.create({
-            student_name: student.name,
-            reason_content: reason,
-            delta: scoreValue
-          })
-        }
-        break
-      }
-      case 'add_tag': {
-        const tagName = action.value
-        if (tagName) {
-          const studentRepo = this.mainCtx.students
-          for (const student of students) {
-            const currentTags = student.tags || []
-            if (!currentTags.includes(tagName)) {
-              await studentRepo.update(student.id, {
-                tags: [...currentTags, tagName]
-              })
-            }
-          }
-        }
-        break
-      }
-      case 'send_notification': {
-        this.logger.info(`Notification action: ${action.value}`)
-        break
-      }
-      case 'set_student_status': {
-        this.logger.info(
-          `Set student status action: ${action.value} (not implemented - student type has no status field)`
-        )
-        break
-      }
-      default:
-        this.logger.warn(`Unknown action event: ${action.event}`)
+    } catch (error) {
+      this.logger.error(`Failed to execute auto score rule ${rule.name}:`, { error })
     }
   }
 
   private stopRules() {
-    for (const [timer] of this.timers) {
+    for (const timer of this.timers.values()) {
       clearTimeout(timer)
       clearInterval(timer)
     }
@@ -555,6 +449,7 @@ export class AutoScoreService extends Service {
     await this.saveRulesToFile()
 
     if (rule.enabled) {
+      await this.ruleEngine.addRule(newRule)
       this.startRuleTimer(newRule)
     }
 
@@ -577,6 +472,7 @@ export class AutoScoreService extends Service {
     await this.saveRulesToFile()
 
     if (updatedRule.enabled) {
+      await this.ruleEngine.addRule(updatedRule)
       this.startRuleTimer(updatedRule)
     }
 
@@ -612,6 +508,7 @@ export class AutoScoreService extends Service {
     }
 
     if (enabled) {
+      await this.ruleEngine.addRule(rule)
       this.startRuleTimer(rule)
     }
 

@@ -227,7 +227,7 @@ export function Sidebar({ activeMenu, permission, onMenuChange }: SidebarProps):
           bodyStyle={{ padding: '12px' }}
         >
           {contextHolder}
-          <Space direction="vertical" size={4} style={{ width: '100%' }}>
+          <Space orientation="vertical" size={4} style={{ width: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Space size={4}>
                 <CloudOutlined style={{ fontSize: '12px', color: '#1890ff' }} />

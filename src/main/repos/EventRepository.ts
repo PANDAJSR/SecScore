@@ -224,4 +224,27 @@ export class EventRepository extends Service {
     const rows = await qb.getRawMany()
     return { startTime, rows }
   }
+
+  async getLastScoreTimeByStudents(
+    studentNames: string[]
+  ): Promise<Map<string, Date>> {
+    if (studentNames.length === 0) return new Map()
+
+    const repo = this.ctx.db.dataSource.getRepository(ScoreEventEntity)
+    const results = await repo
+      .createQueryBuilder('e')
+      .select('e.student_name', 'student_name')
+      .addSelect('MAX(e.event_time)', 'last_time')
+      .where('e.student_name IN (:...studentNames)', { studentNames })
+      .groupBy('e.student_name')
+      .getRawMany()
+
+    const map = new Map<string, Date>()
+    for (const row of results) {
+      if (row.last_time) {
+        map.set(row.student_name, new Date(row.last_time))
+      }
+    }
+    return map
+  }
 }
