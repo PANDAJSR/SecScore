@@ -1,4 +1,10 @@
 import type { RuleGroupType, Field, Operator } from 'react-querybuilder'
+import  {defaultOperators} from 'react-querybuilder'
+import { fetchAllTags } from '../TagEditorDialog'
+
+import type {  FullField, RuleType } from 'react-querybuilder';
+import {  toFullOption } from 'react-querybuilder';
+const tags = await fetchAllTags()
 
 export interface AutoScoreTrigger {
   event: string
@@ -12,32 +18,11 @@ export interface AutoScoreAction {
   reason?: string
 }
 
+const musicalInstruments = fetchAllTags().then((tags) => tags.map((tag) => tag.name))
+
 export interface AutoScoreRuleData {
   triggers: AutoScoreTrigger[]
   actions: AutoScoreAction[]
-}
-
-// i18n key definitions for triggers and actions
-export const TRIGGER_TYPE_KEYS = {
-  interval_time_passed: {
-    labelKey: 'autoScore.triggerIntervalTime',
-    descriptionKey: 'triggers.intervalTime.description'
-  },
-  student_has_tag: {
-    labelKey: 'autoScore.triggerStudentTag',
-    descriptionKey: 'triggers.studentTag.description'
-  }
-}
-
-export const ACTION_TYPE_KEYS = {
-  add_score: {
-    labelKey: 'autoScore.actionAddScore',
-    descriptionKey: 'actions.addScore.description'
-  },
-  add_tag: {
-    labelKey: 'autoScore.actionAddTag',
-    descriptionKey: 'actions.addTag.description'
-  }
 }
 
 // Function to get fields with i18n support
@@ -45,19 +30,55 @@ export const getFields = (t: (key: string) => string): Field[] => [
   {
     name: 'interval_time_passed',
     label: t('autoScore.triggerIntervalTime'),
-    placeholder: t('autoScore.intervalMinutesPlaceholder')
+    placeholder: t('autoScore.intervalMinutesPlaceholder'),
+    inputType: 'date',
+    datatype: 'timestamp with time zone',
   },
   {
     name: 'student_has_tag',
     label: t('autoScore.triggerStudentTag'),
-    placeholder: t('autoScore.tagNamesPlaceholder')
-  }
+    placeholder: t('autoScore.tagNamesPlaceholder'),
+    valueEditorType: 'multiselect',
+    values: tags.map((tag) => tag.name),
+    defaultValue: tags.length > 0 ? [tags[0].name] : [],
+    operators: defaultOperators.filter((op) => op.name === '='),
+  },
+  {
+    name: 'tourStops',
+    label: 'Tour stops',
+    
+    matchModes: true,
+    subproperties: [
+      { name: 'date', label: 'Date', inputType: 'date', datatype: 'date' },
+      { name: 'time', label: 'Time', inputType: 'time', datatype: 'time' },
+    ],
+  },
 ]
 
-export const operators: Operator[] = [
+/* export const operators: Operator[] = [
   { name: '=', label: '=' },
-  { name: 'contains', label: 'contains' }
-]
+  { name: 'contains', label: 'contains' },
+  { name: 'between', label: 'between' }
+] */
+
+export const fields: FullField[] = (
+  [
+    {
+      name: 'interval_time_passed',
+      label: ('autoScore.triggerIntervalTime'),
+      placeholder: ('autoScore.intervalMinutesPlaceholder')
+    },
+    {
+      name: 'student_has_tag',
+      label: ('autoScore.triggerStudentTag'),
+      placeholder: ('autoScore.tagNamesPlaceholder'),
+      valueEditorType: 'multiselect',
+      values: tags.map((tag) => tag.name),
+      defaultValue: 'more_cowbell',
+      operators: defaultOperators.filter((op) => op.name === 'in'),
+    }
+  ] satisfies Field[]
+).map((o) => toFullOption(o)); 
 
 export const defaultQuery: RuleGroupType = {
   combinator: 'and',
@@ -117,3 +138,27 @@ export function autoScoreRuleToQuery(ruleData: AutoScoreRuleData): RuleGroupType
     rules: rules.length > 0 ? rules : defaultQuery.rules
   }
 }
+
+/* import type { Field, FullField, RuleType } from 'react-querybuilder';
+import { defaultOperators, toFullOption } from 'react-querybuilder';
+import { fetchAllTags } from '../TagEditorDialog'
+const tags = await fetchAllTags()
+
+export const fields: FullField[] = (
+  [
+    {
+      name: 'interval_time_passed',
+      label: ('autoScore.triggerIntervalTime'),
+      placeholder: ('autoScore.intervalMinutesPlaceholder')
+    },
+    {
+      name: 'student_has_tag',
+      label: ('autoScore.triggerStudentTag'),
+      placeholder: ('autoScore.tagNamesPlaceholder'),
+      valueEditorType: 'multiselect',
+      values: tags.map((tag) => tag.name),
+      defaultValue: 'more_cowbell',
+      operators: defaultOperators.filter((op) => op.name === 'in'),
+    }
+  ] satisfies Field[]
+).map((o) => toFullOption(o)); */

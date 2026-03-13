@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { PlusOutlined, HolderOutlined, DeleteOutlined } from '@ant-design/icons'
+import { HolderOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import RuleComponent from './autoScore/ruleComponent'
 import {
@@ -526,14 +526,16 @@ export const AutoScoreManager: React.FC = () => {
         </Form>
       </Card>
 
-      <Card
+      <RuleComponent />
+      
+{/*       <Card
         style={{ marginBottom: '24px', backgroundColor: 'var(--ss-card-bg)' }}
         title={t('autoScore.whenTriggered')}
       >
         <Space orientation="vertical" style={{ width: '100%' }}>
-          {/*             {triggerList.map((trigger, index) => renderTriggerItem(trigger, index))}
-           */}{' '}
-          <RuleComponent />
+                       {triggerList.map((trigger, index) => renderTriggerItem(trigger, index))}
+           {' '}
+          
           <Button
             type="dashed"
             icon={<PlusOutlined />}
@@ -543,9 +545,9 @@ export const AutoScoreManager: React.FC = () => {
             {t('autoScore.addTrigger')}
           </Button>
         </Space>
-      </Card>
+      </Card>  */}
 
-      <Card
+{/*       <Card
         style={{ marginBottom: '24px', backgroundColor: 'var(--ss-card-bg)' }}
         title={t('autoScore.triggeredActions')}
       >
@@ -560,7 +562,7 @@ export const AutoScoreManager: React.FC = () => {
             {t('autoScore.addAction')}
           </Button>
         </Space>
-      </Card>
+      </Card> */}
 
       <div style={{ marginBottom: '24px', display: 'flex', gap: '12px' }}>
         <Button type="primary" onClick={handleSubmit}>

@@ -15,6 +15,20 @@ interface TagEditorDialogProps {
   title?: string
 }
 
+export async function fetchAllTags() {
+  if (!(window as any).api) return []
+  try {
+    const res = await (window as any).api.tagsGetAll()
+    if (res.success && res.data) {
+      return res.data
+    }
+    return []
+  } catch (e) {
+    console.error('Failed to fetch tags:', e)
+    return []
+  }
+}
+
 export const TagEditorDialog: React.FC<TagEditorDialogProps> = ({
   visible,
   onClose,
@@ -28,24 +42,11 @@ export const TagEditorDialog: React.FC<TagEditorDialogProps> = ({
   const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set(initialTagIds))
   const [messageApi, contextHolder] = message.useMessage()
 
-  async function fetchAllTags() {
-    if (!(window as any).api) return
-    try {
-      const res = await (window as any).api.tagsGetAll()
-      if (res.success && res.data) {
-        setAllTags(res.data)
-      }
-    } catch (e) {
-      console.error('Failed to fetch tags:', e)
-      messageApi.error(t('tags.fetchFailed'))
-    }
-  }
-
   useEffect(() => {
     if (visible) {
       setSelectedTagIds(new Set(initialTagIds))
       setInputValue('')
-      fetchAllTags()
+      fetchAllTags().then((tags) => setAllTags(tags))
     }
   }, [visible, initialTagIds])
 
