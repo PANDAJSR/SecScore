@@ -16,7 +16,7 @@ export interface AutoScoreContext {
     id: number
     name: string
     studentNames: string[]
-    triggers?: Array<{ event: string; value?: string; relation?: 'AND' | 'OR' }>
+    triggers?: Array<{ event: string; value?: string; relation?: "AND" | "OR" }>
     actions?: Array<{ event: string; value?: string; reason?: string }>
   }
   now: Date
@@ -39,7 +39,7 @@ export interface RuleConfig {
   triggers: Array<{
     event: string
     value?: string
-    relation?: 'AND' | 'OR'
+    relation?: "AND" | "OR"
   }>
   actions: Array<{
     event: string
@@ -61,11 +61,11 @@ export class AutoScoreRuleEngine {
   }
 
   private checkIntervalTimeTrigger(
-    students: AutoScoreContext['students'],
+    students: AutoScoreContext["students"],
     value: string | undefined,
     now: Date
   ): Set<number> {
-    const minutes = parseInt(value || '30', 10)
+    const minutes = parseInt(value || "30", 10)
     if (isNaN(minutes) || minutes <= 0) return new Set()
 
     const intervalMs = minutes * 60 * 1000
@@ -87,12 +87,12 @@ export class AutoScoreRuleEngine {
   }
 
   private checkStudentTagTrigger(
-    students: AutoScoreContext['students'],
+    students: AutoScoreContext["students"],
     value: string | undefined
   ): Set<number> {
     const requiredTags =
       value
-        ?.split(',')
+        ?.split(",")
         .map((t) => t.trim())
         .filter(Boolean) || []
 
@@ -129,17 +129,17 @@ export class AutoScoreRuleEngine {
       if (triggers.length === 0) continue
 
       const triggerResults: Set<number>[] = []
-      const relations: ('AND' | 'OR')[] = []
+      const relations: ("AND" | "OR")[] = []
 
       for (let i = 0; i < triggers.length; i++) {
         const trigger = triggers[i]
         let matchedIds: Set<number>
 
         switch (trigger.event) {
-          case 'interval_time_passed':
+          case "interval_time_passed":
             matchedIds = this.checkIntervalTimeTrigger(context.students, trigger.value, context.now)
             break
-          case 'student_has_tag':
+          case "student_has_tag":
             matchedIds = this.checkStudentTagTrigger(context.students, trigger.value)
             break
           default:
@@ -147,15 +147,15 @@ export class AutoScoreRuleEngine {
         }
 
         triggerResults.push(matchedIds)
-        relations.push(trigger.relation || (i === 0 ? 'AND' : 'AND'))
+        relations.push(trigger.relation || (i === 0 ? "AND" : "AND"))
       }
 
       if (triggerResults.length === 0) continue
 
       let finalMatchedIds: Set<number>
-      const firstRelation = triggers[0]?.relation || 'AND'
+      const firstRelation = triggers[0]?.relation || "AND"
 
-      if (firstRelation === 'OR') {
+      if (firstRelation === "OR") {
         finalMatchedIds = new Set<number>()
         for (const ids of triggerResults) {
           for (const id of ids) {
@@ -165,8 +165,8 @@ export class AutoScoreRuleEngine {
       } else {
         finalMatchedIds = new Set(triggerResults[0])
         for (let i = 1; i < triggerResults.length; i++) {
-          const relation = triggers[i]?.relation || 'AND'
-          if (relation === 'OR') {
+          const relation = triggers[i]?.relation || "AND"
+          if (relation === "OR") {
             for (const id of triggerResults[i]) {
               finalMatchedIds.add(id)
             }
@@ -190,9 +190,9 @@ export class AutoScoreRuleEngine {
           matchedStudents: matchedStudents.map((s) => ({
             id: s.id,
             name: s.name,
-            tags: s.tags
+            tags: s.tags,
           })),
-          actions: rule.actions || []
+          actions: rule.actions || [],
         })
       }
     }
@@ -207,19 +207,19 @@ export class AutoScoreRuleEngine {
     eventRepo: any
   ): Promise<void> {
     switch (actionType) {
-      case 'add_score': {
+      case "add_score": {
         const scoreValue = params.value ? parseInt(params.value, 10) : 0
         const reason = params.reason || `自动化加分 - ${params.ruleName}`
         for (const student of students) {
           await eventRepo.create({
             student_name: student.name,
             reason_content: reason,
-            delta: scoreValue
+            delta: scoreValue,
           })
         }
         break
       }
-      case 'add_tag': {
+      case "add_tag": {
         const tagName = params.value
         if (tagName) {
           const studentRepo: any = params.studentRepo
@@ -227,7 +227,7 @@ export class AutoScoreRuleEngine {
             const currentTags = student.tags || []
             if (!currentTags.includes(tagName)) {
               await studentRepo.update(student.id, {
-                tags: [...currentTags, tagName]
+                tags: [...currentTags, tagName],
               })
             }
           }

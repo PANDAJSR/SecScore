@@ -1,40 +1,49 @@
-import { defineConfig } from 'eslint/config'
-import tseslint from '@electron-toolkit/eslint-config-ts'
-import eslintConfigPrettier from '@electron-toolkit/eslint-config-prettier'
-import eslintPluginReact from 'eslint-plugin-react'
-import eslintPluginReactHooks from 'eslint-plugin-react-hooks'
-import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
+import { defineConfig } from "eslint/config"
+import tseslint from "typescript-eslint"
+import eslintConfigPrettier from "eslint-config-prettier"
+import eslintPluginReact from "eslint-plugin-react"
+import eslintPluginReactHooks from "eslint-plugin-react-hooks"
+import eslintPluginReactRefresh from "eslint-plugin-react-refresh"
 
 export default defineConfig(
-  { ignores: ['**/node_modules', '**/dist', '**/out', 'scripts/**', 'secrandom_ipc_send_url.js'] },
+  {
+    ignores: [
+      "**/node_modules",
+      "**/dist",
+      "**/dist-ssr",
+      "**/out",
+      "**/src-tauri/target",
+      "**/src-tauri/gen",
+      "scripts/**",
+    ],
+  },
   tseslint.configs.recommended,
   eslintPluginReact.configs.flat.recommended,
-  eslintPluginReact.configs.flat['jsx-runtime'],
+  eslintPluginReact.configs.flat["jsx-runtime"],
   {
     settings: {
       react: {
-        version: 'detect'
-      }
-    }
+        version: "detect",
+      },
+    },
   },
   {
-    files: ['**/*.{ts,tsx}'],
+    files: ["**/*.{ts,tsx}"],
     plugins: {
-      'react-hooks': eslintPluginReactHooks,
-      'react-refresh': eslintPluginReactRefresh
+      "react-hooks": eslintPluginReactHooks,
+      "react-refresh": eslintPluginReactRefresh,
     },
     rules: {
       ...eslintPluginReactHooks.configs.recommended.rules,
       ...eslintPluginReactRefresh.configs.vite.rules,
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/no-explicit-any': 'off',
-      'react-refresh/only-export-components': 'off',
-      'react-hooks/exhaustive-deps': 'warn',
-      'react-hooks/set-state-in-effect': 'off',
-      '@typescript-eslint/no-require-imports': 'off',
-      // we use TypeScript types instead of PropTypes in React components
-      'react/prop-types': 'off'
-    }
+      "@typescript-eslint/explicit-function-return-type": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+      "react-refresh/only-export-components": "off",
+      "react-hooks/exhaustive-deps": "warn",
+      "react-hooks/set-state-in-effect": "off",
+      "@typescript-eslint/no-require-imports": "off",
+      "react/prop-types": "off",
+    },
   },
   eslintConfigPrettier
 )

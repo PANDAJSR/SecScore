@@ -1,227 +1,297 @@
-export interface ipcResponse<T = any> {
-  success: boolean
-  data?: T
-  message?: string
-}
-
-export type logLevel = 'info' | 'warn' | 'error' | 'debug'
-export type permissionLevel = 'admin' | 'points' | 'view'
+import { invoke } from "@tauri-apps/api/core"
+import { listen, UnlistenFn } from "@tauri-apps/api/event"
 
 export interface themeConfig {
   name: string
   id: string
-  mode: 'light' | 'dark'
+  mode: "light" | "dark"
   config: {
     tdesign: Record<string, string>
     custom: Record<string, string>
   }
 }
 
-export type settingsSpec = {
+export interface settingChange {
+  key: string
+  value: any
+  oldValue: any
+}
+
+export type settingsKey =
+  | "is_wizard_completed"
+  | "log_level"
+  | "window_zoom"
+  | "themes_custom"
+  | "auto_score_enabled"
+  | "auto_score_rules"
+  | "current_theme_id"
+  | "pg_connection_string"
+  | "pg_connection_status"
+
+export interface settingsSpec {
   is_wizard_completed: boolean
-  log_level: logLevel
+  log_level: string
   window_zoom: number
   themes_custom: themeConfig[]
   auto_score_enabled: boolean
   auto_score_rules: any[]
   current_theme_id: string
   pg_connection_string: string
-  pg_connection_status: { connected: boolean; type: 'sqlite' | 'postgresql'; error?: string }
+  pg_connection_status: {
+    connected: boolean
+    type: "sqlite" | "postgresql"
+    error?: string
+  }
 }
 
-export type settingsKey = keyof settingsSpec
-
-export interface ConfigFileInfo {
-  name: string
-  path: string
-  size: number
-  modified: string
-}
-
-export interface ConfigFolderStructure {
-  configRoot: string
-  automatic: string
-  sscript: string
-}
-
-export type settingChange<K extends settingsKey = settingsKey> = {
-  key: K
-  value: settingsSpec[K]
-}
-
-export interface electronApi {
+const api = {
   // Theme
-  getThemes: () => Promise<ipcResponse<themeConfig[]>>
-  getCurrentTheme: () => Promise<ipcResponse<themeConfig>>
-  setTheme: (themeId: string) => Promise<ipcResponse<void>>
-  saveTheme: (theme: themeConfig) => Promise<ipcResponse<void>>
-  deleteTheme: (themeId: string) => Promise<ipcResponse<void>>
-  onThemeChanged: (callback: (theme: themeConfig) => void) => () => void
+  getThemes: (): Promise<{ success: boolean; data: themeConfig[] }> => invoke("theme_list"),
+  getCurrentTheme: (): Promise<{ success: boolean; data: themeConfig }> => invoke("theme_current"),
+  setTheme: (themeId: string): Promise<{ success: boolean }> => invoke("theme_set", { themeId }),
+  saveTheme: (theme: themeConfig): Promise<{ success: boolean }> => invoke("theme_save", { theme }),
+  deleteTheme: (themeId: string): Promise<{ success: boolean }> =>
+    invoke("theme_delete", { themeId }),
+  onThemeChanged: (callback: (theme: themeConfig) => void): Promise<UnlistenFn> => {
+    return listen<{ theme: themeConfig }>("theme:updated", (event) => {
+      callback(event.payload.theme)
+    })
+  },
 
   // DB - Student
-  queryStudents: (params?: any) => Promise<ipcResponse<any[]>>
-  createStudent: (data: { name: string }) => Promise<ipcResponse<number>>
-  updateStudent: (id: number, data: any) => Promise<ipcResponse<void>>
-  deleteStudent: (id: number) => Promise<ipcResponse<void>>
+  queryStudents: (params?: any): Promise<{ success: boolean; data: any[] }> =>
+    invoke("student_query", { params }),
+  createStudent: (data: {
+    name: string
+  }): Promise<{ success: boolean; data?: number; message?: string }> =>
+    invoke("student_create", { data }),
+  updateStudent: (id: number, data: any): Promise<{ success: boolean }> =>
+    invoke("student_update", { id, data }),
+  deleteStudent: (id: number): Promise<{ success: boolean }> => invoke("student_delete", { id }),
+  importStudentsFromXlsx: (params: {
+    names: string[]
+  }): Promise<{ success: boolean; data: { inserted: number; skipped: number; total: number } }> =>
+    invoke("student_import_from_xlsx", { params }),
 
   // DB - Tags
-  tagsGetAll: () => Promise<ipcResponse<{ id: number; name: string }[]>>
-  tagsGetByStudent: (studentId: number) => Promise<ipcResponse<{ id: number; name: string }[]>>
-  tagsCreate: (name: string) => Promise<ipcResponse<{ id: number; name: string }>>
-  tagsDelete: (id: number) => Promise<ipcResponse<void>>
-  tagsUpdateStudentTags: (studentId: number, tagIds: number[]) => Promise<ipcResponse<void>>
+  tagsGetAll: (): Promise<{ success: boolean; data: any[] }> => invoke("tags_get_all"),
+  tagsGetByStudent: (studentId: number): Promise<{ success: boolean; data: any[] }> =>
+    invoke("tags_get_by_student", { studentId }),
+  tagsCreate: (name: string): Promise<{ success: boolean; data: any }> =>
+    invoke("tags_create", { name }),
+  tagsDelete: (id: number): Promise<{ success: boolean }> => invoke("tags_delete", { id }),
+  tagsUpdateStudentTags: (studentId: number, tagIds: number[]): Promise<{ success: boolean }> =>
+    invoke("tags_update_student_tags", { studentId, tagIds }),
 
   // DB - Reason
-  queryReasons: () => Promise<ipcResponse<any[]>>
-  createReason: (data: any) => Promise<ipcResponse<number>>
-  updateReason: (id: number, data: any) => Promise<ipcResponse<void>>
-  deleteReason: (id: number) => Promise<ipcResponse<void>>
+  queryReasons: (): Promise<{ success: boolean; data: any[] }> => invoke("reason_query"),
+  createReason: (data: any): Promise<{ success: boolean; data?: number; message?: string }> =>
+    invoke("reason_create", { data }),
+  updateReason: (id: number, data: any): Promise<{ success: boolean }> =>
+    invoke("reason_update", { id, data }),
+  deleteReason: (id: number): Promise<{ success: boolean }> => invoke("reason_delete", { id }),
 
   // DB - Event
-  queryEvents: (params?: any) => Promise<ipcResponse<any[]>>
+  queryEvents: (params?: { limit?: number }): Promise<{ success: boolean; data: any[] }> =>
+    invoke("event_query", { params }),
   createEvent: (data: {
-    student_name: string
-    reason_content: string
+    studentName: string
+    reasonContent: string
     delta: number
-  }) => Promise<ipcResponse<number>>
-  deleteEvent: (uuid: string) => Promise<ipcResponse<void>>
+  }): Promise<{ success: boolean; data?: number; message?: string }> =>
+    invoke("event_create", { data }),
+  deleteEvent: (uuid: string): Promise<{ success: boolean }> => invoke("event_delete", { uuid }),
   queryEventsByStudent: (params: {
-    student_name: string
+    studentName: string
     limit?: number
-    startTime?: string | null
-  }) => Promise<ipcResponse<any[]>>
+    startTime?: string
+  }): Promise<{ success: boolean; data: any[] }> => invoke("event_query_by_student", { params }),
   queryLeaderboard: (params: {
-    range: 'today' | 'week' | 'month'
-  }) => Promise<ipcResponse<{ startTime: string; rows: any[] }>>
+    range: "today" | "week" | "month"
+  }): Promise<{ success: boolean; data: { startTime: string; rows: any[] } }> =>
+    invoke("leaderboard_query", { params }),
 
   // Settlement
-  querySettlements: () => Promise<
-    ipcResponse<{ id: number; start_time: string; end_time: string; event_count: number }[]>
-  >
-  createSettlement: () => Promise<
-    ipcResponse<{ settlementId: number; startTime: string; endTime: string; eventCount: number }>
-  >
-  querySettlementLeaderboard: (params: { settlement_id: number }) => Promise<
-    ipcResponse<{
-      settlement: { id: number; start_time: string; end_time: string }
-      rows: { name: string; score: number }[]
-    }>
-  >
+  querySettlements: (): Promise<{ success: boolean; data: any[] }> => invoke("db_settlement_query"),
+  createSettlement: (): Promise<{ success: boolean; data: any }> => invoke("db_settlement_create"),
+  querySettlementLeaderboard: (params: {
+    settlementId: number
+  }): Promise<{ success: boolean; data: any }> => invoke("db_settlement_leaderboard", { params }),
 
-  // Settings
-  getAllSettings: () => Promise<ipcResponse<settingsSpec>>
-  getSetting: <K extends settingsKey>(key: K) => Promise<ipcResponse<settingsSpec[K]>>
-  setSetting: <K extends settingsKey>(key: K, value: settingsSpec[K]) => Promise<ipcResponse<void>>
-  onSettingChanged: (callback: (change: settingChange) => void) => () => void
+  // Settings & Sync
+  getAllSettings: (): Promise<{ success: boolean; data: settingsSpec }> =>
+    invoke("settings_get_all"),
+  getSetting: <K extends settingsKey>(
+    key: K
+  ): Promise<{ success: boolean; data: settingsSpec[K] }> => invoke("settings_get", { key }),
+  setSetting: <K extends settingsKey>(
+    key: K,
+    value: settingsSpec[K]
+  ): Promise<{ success: boolean }> => invoke("settings_set", { key, value }),
+  onSettingChanged: (callback: (change: settingChange) => void): Promise<UnlistenFn> => {
+    return listen<settingChange>("settings:changed", (event) => {
+      callback(event.payload)
+    })
+  },
 
   // Auth & Security
-  authGetStatus: () => Promise<
-    ipcResponse<{
-      permission: permissionLevel
+  authGetStatus: (): Promise<{
+    success: boolean
+    data: {
+      permission: string
       hasAdminPassword: boolean
       hasPointsPassword: boolean
       hasRecoveryString: boolean
-    }>
-  >
-  authLogin: (password: string) => Promise<ipcResponse<{ permission: permissionLevel }>>
-  authLogout: () => Promise<ipcResponse<{ permission: permissionLevel }>>
+    }
+  }> => invoke("auth_get_status"),
+  authLogin: (
+    password: string
+  ): Promise<{ success: boolean; data?: { permission: string }; message?: string }> =>
+    invoke("auth_login", { password }),
+  authLogout: (): Promise<{ success: boolean; data: { permission: string } }> =>
+    invoke("auth_logout"),
   authSetPasswords: (payload: {
     adminPassword?: string | null
     pointsPassword?: string | null
-  }) => Promise<ipcResponse<{ recoveryString?: string }>>
-  authGenerateRecovery: () => Promise<ipcResponse<{ recoveryString: string }>>
-  authResetByRecovery: (recoveryString: string) => Promise<ipcResponse<{ recoveryString: string }>>
-  authClearAll: () => Promise<ipcResponse<void>>
+  }): Promise<{ success: boolean; data?: { recoveryString: string }; message?: string }> =>
+    invoke("auth_set_passwords", payload),
+  authGenerateRecovery: (): Promise<{ success: boolean; data: { recoveryString: string } }> =>
+    invoke("auth_generate_recovery"),
+  authResetByRecovery: (
+    recoveryString: string
+  ): Promise<{ success: boolean; data?: { recoveryString: string }; message?: string }> =>
+    invoke("auth_reset_by_recovery", { recoveryString }),
+  authClearAll: (): Promise<{ success: boolean }> => invoke("auth_clear_all"),
 
   // Data import/export
-  exportDataJson: () => Promise<ipcResponse<string>>
-  importDataJson: (jsonText: string) => Promise<ipcResponse<void>>
+  exportDataJson: (): Promise<{ success: boolean; data: string }> => invoke("data_export_json"),
+  importDataJson: (jsonText: string): Promise<{ success: boolean }> =>
+    invoke("data_import_json", { jsonText }),
 
   // Window
-  openWindow: (input: {
-    key: string
-    title?: string
-    route?: string
-    options?: any
-  }) => Promise<ipcResponse<void>>
-  navigateWindow: (input: { key?: string; route: string }) => Promise<ipcResponse<void>>
-  windowMinimize: () => Promise<void>
-  windowMaximize: () => Promise<boolean>
-  windowClose: () => Promise<void>
-  windowIsMaximized: () => Promise<boolean>
-  onWindowMaximizedChanged: (callback: (maximized: boolean) => void) => () => void
-  onNavigate: (callback: (route: string) => void) => () => void
-  toggleDevTools: () => Promise<void>
-  windowResize: (width: number, height: number) => Promise<void>
+  windowMinimize: (): Promise<void> => invoke("window_minimize"),
+  windowMaximize: (): Promise<boolean> => invoke("window_maximize"),
+  windowClose: (): Promise<void> => invoke("window_close"),
+  windowIsMaximized: (): Promise<boolean> => invoke("window_is_maximized"),
+  onWindowMaximizedChanged: (callback: (maximized: boolean) => void): Promise<UnlistenFn> => {
+    return listen<boolean>("window:maximized-changed", (event) => {
+      callback(event.payload)
+    })
+  },
+  onNavigate: (callback: (route: string) => void): Promise<UnlistenFn> => {
+    return listen<string>("app:navigate", (event) => {
+      callback(event.payload)
+    })
+  },
 
   // Logger
-  queryLogs: (lines?: number) => Promise<ipcResponse<string[]>>
-  clearLogs: () => Promise<ipcResponse<void>>
-  setLogLevel: (level: logLevel) => Promise<ipcResponse<void>>
+  queryLogs: (params?: { lines?: number }): Promise<{ success: boolean; data: string[] }> =>
+    invoke("log_query", { params }),
+  clearLogs: (): Promise<{ success: boolean }> => invoke("log_clear"),
+  setLogLevel: (level: string): Promise<{ success: boolean }> => invoke("log_set_level", { level }),
   writeLog: (payload: {
-    level: logLevel
+    level: string
     message: string
     meta?: any
-  }) => Promise<ipcResponse<void>>
-
-  registerUrlProtocol: () => Promise<ipcResponse<{ registered?: boolean }>>
+  }): Promise<{ success: boolean }> => invoke("log_write", payload),
 
   // Database Connection
   dbTestConnection: (
     connectionString: string
-  ) => Promise<ipcResponse<{ success: boolean; error?: string }>>
+  ): Promise<{ success: boolean; data: { success: boolean; error?: string } }> =>
+    invoke("db_test_connection", { connectionString }),
   dbSwitchConnection: (
     connectionString: string
-  ) => Promise<ipcResponse<{ type: 'sqlite' | 'postgresql' }>>
-  dbGetStatus: () => Promise<
-    ipcResponse<{ type: 'sqlite' | 'postgresql'; connected: boolean; error?: string }>
-  >
-  dbSync: () => Promise<ipcResponse<{ success: boolean; message?: string }>>
+  ): Promise<{ success: boolean; data: { type: "sqlite" | "postgresql" } }> =>
+    invoke("db_switch_connection", { connectionString }),
+  dbGetStatus: (): Promise<{
+    success: boolean
+    data: { type: string; connected: boolean; error?: string }
+  }> => invoke("db_get_status"),
+  dbSync: (): Promise<{ success: boolean; data: { success: boolean; message?: string } }> =>
+    invoke("db_sync"),
 
   // HTTP Server
   httpServerStart: (config?: {
     port?: number
     host?: string
     corsOrigin?: string
-  }) => Promise<
-    ipcResponse<{ url: string; config: { port: number; host: string; corsOrigin?: string } }>
-  >
-  httpServerStop: () => Promise<ipcResponse<void>>
-  httpServerStatus: () => Promise<
-    ipcResponse<{
-      isRunning: boolean
-      config: { port: number; host: string; corsOrigin?: string }
-      url: string | null
-    }>
-  >
+  }): Promise<{ success: boolean; data: { url: string; config: any } }> =>
+    invoke("http_server_start", { config }),
+  httpServerStop: (): Promise<{ success: boolean }> => invoke("http_server_stop"),
+  httpServerStatus: (): Promise<{
+    success: boolean
+    data: { isRunning: boolean; config?: any; url?: string }
+  }> => invoke("http_server_status"),
 
   // File System
-  fsGetConfigStructure: () => Promise<ipcResponse<ConfigFolderStructure>>
-  fsReadJson: (relativePath: string, folder?: 'automatic' | 'sscript') => Promise<ipcResponse<any>>
+  fsGetConfigStructure: (): Promise<{
+    success: boolean
+    data: { configRoot: string; automatic: string; script: string }
+  }> => invoke("fs_get_config_structure"),
+  fsReadJson: (
+    relativePath: string,
+    folder?: "automatic" | "script"
+  ): Promise<{ success: boolean; data: any }> => invoke("fs_read_json", { relativePath, folder }),
   fsWriteJson: (
     relativePath: string,
     data: any,
-    folder?: 'automatic' | 'sscript'
-  ) => Promise<ipcResponse<void>>
+    folder?: "automatic" | "script"
+  ): Promise<{ success: boolean }> => invoke("fs_write_json", { relativePath, data, folder }),
   fsReadText: (
     relativePath: string,
-    folder?: 'automatic' | 'sscript'
-  ) => Promise<ipcResponse<string | null>>
+    folder?: "automatic" | "script"
+  ): Promise<{ success: boolean; data: string }> =>
+    invoke("fs_read_text", { relativePath, folder }),
   fsWriteText: (
     content: string,
     relativePath: string,
-    folder?: 'automatic' | 'sscript'
-  ) => Promise<ipcResponse<void>>
+    folder?: "automatic" | "script"
+  ): Promise<{ success: boolean }> => invoke("fs_write_text", { content, relativePath, folder }),
   fsDeleteFile: (
     relativePath: string,
-    folder?: 'automatic' | 'sscript'
-  ) => Promise<ipcResponse<void>>
-  fsListFiles: (folder?: 'automatic' | 'sscript') => Promise<ipcResponse<ConfigFileInfo[]>>
+    folder?: "automatic" | "script"
+  ): Promise<{ success: boolean }> => invoke("fs_delete_file", { relativePath, folder }),
+  fsListFiles: (folder?: "automatic" | "script"): Promise<{ success: boolean; data: any[] }> =>
+    invoke("fs_list_files", { folder }),
   fsFileExists: (
     relativePath: string,
-    folder?: 'automatic' | 'sscript'
-  ) => Promise<ipcResponse<boolean>>
+    folder?: "automatic" | "script"
+  ): Promise<{ success: boolean; data: boolean }> =>
+    invoke("fs_file_exists", { relativePath, folder }),
 
-  // Generic invoke wrapper (minimal compatibility API)
-  invoke?: (channel: string, ...args: any[]) => Promise<any>
+  // App
+  registerUrlProtocol: (): Promise<{
+    success: boolean
+    data?: { registered: boolean }
+    message?: string
+  }> => invoke("register_url_protocol"),
+
+  // Auto Score
+  autoScoreGetRules: (): Promise<{ success: boolean; data: any[] }> =>
+    invoke("auto_score_get_rules"),
+  autoScoreAddRule: (rule: any): Promise<{ success: boolean; data?: number; message?: string }> =>
+    invoke("auto_score_add_rule", { rule }),
+  autoScoreUpdateRule: (
+    rule: any
+  ): Promise<{ success: boolean; data?: boolean; message?: string }> =>
+    invoke("auto_score_update_rule", { rule }),
+  autoScoreDeleteRule: (
+    ruleId: number
+  ): Promise<{ success: boolean; data?: boolean; message?: string }> =>
+    invoke("auto_score_delete_rule", { ruleId }),
+  autoScoreToggleRule: (params: {
+    ruleId: number
+    enabled: boolean
+  }): Promise<{ success: boolean; data?: boolean; message?: string }> =>
+    invoke("auto_score_toggle_rule", params),
+  autoScoreGetStatus: (): Promise<{ success: boolean; data: { enabled: boolean } }> =>
+    invoke("auto_score_get_status"),
+  autoScoreSortRules: (
+    ruleIds: number[]
+  ): Promise<{ success: boolean; data?: boolean; message?: string }> =>
+    invoke("auto_score_sort_rules", { ruleIds }),
 }
+
+export default api
+export { api }

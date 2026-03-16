@@ -1,4 +1,4 @@
-import type { AutoScoreContext } from '../AutoScoreRuleEngine'
+import type { AutoScoreContext } from "../AutoScoreRuleEngine"
 
 export interface IntervalTimeTriggerConfig {
   intervalMinutes: number
@@ -6,14 +6,14 @@ export interface IntervalTimeTriggerConfig {
 
 export function createIntervalTimeTrigger() {
   return {
-    id: 'interval_time_passed',
-    label: '间隔时间',
-    description: '每隔指定时间自动触发',
+    id: "interval_time_passed",
+    label: "间隔时间",
+    description: "每隔指定时间自动触发",
 
     validate: (value: string): { valid: boolean; message?: string } => {
       const minutes = parseInt(value, 10)
       if (isNaN(minutes) || minutes <= 0) {
-        return { valid: false, message: '请输入有效的分钟数' }
+        return { valid: false, message: "请输入有效的分钟数" }
       }
       return { valid: true }
     },
@@ -65,7 +65,7 @@ export function createIntervalTimeTrigger() {
 
       return {
         shouldExecute: matchedStudents.length > 0,
-        matchedStudents
+        matchedStudents,
       }
     },
 
@@ -76,13 +76,13 @@ export function createIntervalTimeTrigger() {
       return {
         all: [
           {
-            fact: 'student',
-            path: '.lastScoreTime',
-            operator: 'lessThan',
-            value: new Date(Date.now() - intervalMs).toISOString()
-          }
-        ]
+            fact: "student",
+            path: ".lastScoreTime",
+            operator: "lessThan",
+            value: new Date(Date.now() - intervalMs).toISOString(),
+          },
+        ],
       }
-    }
+    },
   }
 }

@@ -7,10 +7,10 @@ on:
     inputs:
       version:
         description: '版本号（例如 1.2.3 或 v1.2.3）'
-        required: false
+        required: true
       build:
-        description: '构建命令标记（build:win|build:mac|build:linux|build:unpack|build:all）'
-        required: false
+        description: '构建命令标记（build:win|build:mac|build:linux|build:all）'
+        required: true
 
 permissions:
   contents: write
@@ -25,7 +25,6 @@ jobs:
       run_win: ${{ steps.parse.outputs.run_win }}
       run_mac: ${{ steps.parse.outputs.run_mac }}
       run_linux: ${{ steps.parse.outputs.run_linux }}
-      run_unpack: ${{ steps.parse.outputs.run_unpack }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -74,6 +73,9 @@ jobs:
         with:
           version: 10
 
+      - name: 安装 Rust
+        uses: dtolnay/rust-action@stable
+
       - name: 应用版本号
         run: node scripts/ci/apply-version.mjs ${{ needs.parse.outputs.version }}
 
@@ -81,21 +83,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: 构建（Windows）
-        run: pnpm build:win
-
-      - name: 清理 unpacked 目录
-        shell: pwsh
-        run: |
-          if (Test-Path dist) {
-            Get-ChildItem -Path dist -Directory -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -like '*unpacked*' } |
-              ForEach-Object { Remove-Item -Recurse -Force $_.FullName }
-          }
+        run: pnpm tauri build --target x86_64-pc-windows-msvc
 
       - uses: actions/upload-artifact@v4
         with:
           name: dist-win
-          path: dist/**
+          path: src-tauri/target/release/bundle/**
 
   build_mac:
     needs: parse
@@ -112,6 +105,9 @@ jobs:
         with:
           version: 10
 
+      - name: 安装 Rust
+        uses: dtolnay/rust-action@stable
+
       - name: 应用版本号
         run: node scripts/ci/apply-version.mjs ${{ needs.parse.outputs.version }}
 
@@ -119,15 +115,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: 构建（macOS）
-        run: pnpm -s build:mac
-
-      - name: 清理 unpacked 目录
-        run: rm -rf dist/*unpacked*
+        run: pnpm tauri build --target x86_64-apple-darwin
 
       - uses: actions/upload-artifact@v4
         with:
           name: dist-mac
-          path: dist/**
+          path: src-tauri/target/release/bundle/**
 
   build_linux:
     needs: parse
@@ -144,6 +137,14 @@ jobs:
         with:
           version: 10
 
+      - name: 安装 Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
       - name: 应用版本号
         run: node scripts/ci/apply-version.mjs ${{ needs.parse.outputs.version }}
 
@@ -151,73 +152,21 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: 构建（Linux）
-        run: pnpm -s build:linux
-
-      - name: 清理 unpacked 目录
-        run: rm -rf dist/*unpacked*
+        run: pnpm tauri build --target x86_64-unknown-linux-gnu
 
       - uses: actions/upload-artifact@v4
         with:
           name: dist-linux
-          path: dist/**
-
-  build_unpack:
-    needs: parse
-    if: ${{ needs.parse.outputs.run_unpack == 'true' }}
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: 应用版本号
-        run: node scripts/ci/apply-version.mjs ${{ needs.parse.outputs.version }}
-
-      - name: 安装依赖
-        run: pnpm install --frozen-lockfile
-
-      - name: 构建（dir）
-        run: pnpm -s build:unpack
-
-      - name: 打包并移除 unpacked 目录
-        shell: pwsh
-        run: |
-          if (Test-Path dist) {
-            $dirs = Get-ChildItem -Path dist -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*unpacked*' }
-            foreach ($d in $dirs) {
-              $zipBase = ($d.Name -replace 'unpacked', 'dir')
-              $zipPath = Join-Path dist "$zipBase.zip"
-              if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
-              Compress-Archive -Path (Join-Path $d.FullName '*') -DestinationPath $zipPath -Force
-              Remove-Item -Recurse -Force $d.FullName
-            }
-          }
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-unpack
-          path: dist/**
+          path: src-tauri/target/release/bundle/**
 
   release:
-    needs: [parse, build_win, build_mac, build_linux, build_unpack]
+    needs: [parse, build_win, build_mac, build_linux]
     if: ${{ always() && needs.parse.outputs.tag != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: 清理 unpacked 目录
-        run: |
-          if [ -d artifacts ]; then
-            find artifacts -type d -name '*unpacked*' -prune -exec rm -rf {} +
-          fi
 
       - name: 发布 Release
         uses: softprops/action-gh-release@v2
@@ -227,7 +176,10 @@ jobs:
           draft: True
           prerelease: ${{ contains(needs.parse.outputs.version, '-') }}
           files: |
-            artifacts/**/*.zip
+            artifacts/**/*.msi
+            artifacts/**/*.exe
             artifacts/**/*.dmg
-            artifacts/**/*.AppImage
+            artifacts/**/*.app.tar.gz
             artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.AppImage
