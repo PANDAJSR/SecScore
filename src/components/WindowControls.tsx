@@ -11,13 +11,28 @@ export function WindowControls(): React.JSX.Element {
   const [isMaximized, setIsMaximized] = useState(false)
 
   useEffect(() => {
-    if (!(window as any).api) return
-    ;(window as any).api.windowIsMaximized().then((v: boolean) => setIsMaximized(v))
+    const api = (window as any).api
+    if (!api) return
 
-    const cleanup = (window as any).api.onWindowMaximizedChanged((maximized: boolean) => {
-      setIsMaximized(maximized)
-    })
-    return cleanup
+    let unlisten: (() => void) | null = null
+
+    api
+      .windowIsMaximized()
+      .then((v: boolean) => setIsMaximized(v))
+      .catch(() => void 0)
+
+    api
+      .onWindowMaximizedChanged((maximized: boolean) => {
+        setIsMaximized(maximized)
+      })
+      .then((fn: () => void) => {
+        unlisten = fn
+      })
+      .catch(() => void 0)
+
+    return () => {
+      if (unlisten) unlisten()
+    }
   }, [])
 
   const minimize = () => {

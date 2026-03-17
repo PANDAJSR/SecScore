@@ -13,6 +13,7 @@ out
 src-tauri/target
 src-tauri/Cargo.lock
 src-tauri/gen
+.cargo-local/
 
 # Database
 data.sql
